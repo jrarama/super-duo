@@ -18,7 +18,6 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
-
 import java.util.regex.Pattern;
 
 import it.jaschke.alexandria.data.AlexandriaContract;
@@ -72,12 +71,12 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
 
             @Override
             public void afterTextChanged(Editable s) {
-                String ean =s.toString();
+                String ean = s.toString();
                 //catch isbn10 numbers
-                if(ean.length()==10 && !ean.startsWith("978")){
-                    ean="978"+ean;
+                if (ean.length() == 10 && !ean.startsWith("978")) {
+                    ean = "978" + ean;
                 }
-                if(ean.length()<13){
+                if (ean.length() < 13) {
                     clearFields();
                     return;
                 }
@@ -102,12 +101,9 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
 
                 clearFields();
                 ean.setText("");
-                try {
-                    FragmentIntentIntegrator integrator = new FragmentIntentIntegrator(AddBook.this);
-                    integrator.initiateScan();
-                } catch (Exception e) {
-                    Log.e(LOG_TAG, "Error scanning.", e);
-                }
+
+                Intent intent = new Intent(getActivity(), BarcodeScannerActivity.class);
+                startActivityForResult(intent, BarcodeScannerActivity.BARCODE_RESULT);
             }
         });
 
@@ -140,12 +136,12 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (data == null) return;
-        super.onActivityResult(requestCode, resultCode, data);
 
-        IntentResult result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
+        if (resultCode != BarcodeScannerActivity.BARCODE_RESULT) return;
 
-        if (result != null) {
-            String contents = result.getContents();
+        String contents = data.getStringExtra(Intent.EXTRA_TEXT);
+
+        if (contents != null) {
             Log.d(LOG_TAG, "Barcode content: " + contents);
 
             if (Pattern.matches("978\\d{7}|\\d{13}", contents)) {

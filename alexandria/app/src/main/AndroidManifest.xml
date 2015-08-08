@@ -31,7 +31,12 @@
                 android:value=".MainActivity" />
         </activity>
 
-
+        <activity
+            android:label="@string/barcode_scanner_title"
+            android:name=".BarcodeScannerActivity"
+            android:screenOrientation="landscape"
+            >
+        </activity>
 
         <provider
             android:name=".data.BookProvider"
