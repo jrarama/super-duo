@@ -17,6 +17,9 @@ import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import java.util.regex.Pattern;
 
 import it.jaschke.alexandria.data.AlexandriaContract;
 import it.jaschke.alexandria.services.BookService;
@@ -26,6 +29,7 @@ import it.jaschke.alexandria.services.DownloadImage;
 public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<Cursor> {
     private static final String TAG = "INTENT_TO_SCAN_ACTIVITY";
     private static final String  LOG_TAG = AddBook.class.getSimpleName();
+
     private EditText ean;
     private final int LOADER_ID = 1;
     private View rootView;
@@ -96,6 +100,8 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
                 // Hint: Use a Try/Catch block to handle the Intent dispatch gracefully, if you
                 // are using an external app.
 
+                clearFields();
+                ean.setText("");
                 try {
                     FragmentIntentIntegrator integrator = new FragmentIntentIntegrator(AddBook.this);
                     integrator.initiateScan();
@@ -133,20 +139,29 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (data == null) return;
         super.onActivityResult(requestCode, resultCode, data);
 
         IntentResult result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
 
         if (result != null) {
             String contents = result.getContents();
+            Log.d(LOG_TAG, "Barcode content: " + contents);
 
-            Log.d("Contents: ", contents);
-            ean.setText(contents);
+            if (Pattern.matches("978\\d{7}|\\d{13}", contents)) {
+                ean.setText(contents);
+            } else {
+                Toast.makeText(getActivity(), "Invalid ISBN code!", Toast.LENGTH_SHORT).show();
+            }
         }
     }
 
     private void restartLoader(){
-        getLoaderManager().restartLoader(LOADER_ID, null, this);
+        try {
+            getLoaderManager().restartLoader(LOADER_ID, null, this);
+        } catch (Exception ex) {
+            Log.e(LOG_TAG, "Unable to restart loader", ex);
+        }
     }
 
     @Override
@@ -181,6 +196,9 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
         ((TextView) rootView.findViewById(R.id.bookSubTitle)).setText(bookSubTitle);
 
         String authors = data.getString(data.getColumnIndex(AlexandriaContract.AuthorEntry.AUTHOR));
+        if (authors == null) {
+            authors = "";
+        }
         String[] authorsArr = authors.split(",");
         ((TextView) rootView.findViewById(R.id.authors)).setLines(authorsArr.length);
         ((TextView) rootView.findViewById(R.id.authors)).setText(authors.replace(",","\n"));
