@@ -33,13 +33,8 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
     private final int LOADER_ID = 1;
     private View rootView;
     private final String EAN_CONTENT="eanContent";
-    private static final String SCAN_FORMAT = "scanFormat";
-    private static final String SCAN_CONTENTS = "scanContents";
-
-    private String mScanFormat = "Format:";
-    private String mScanContents = "Contents:";
-
-
+    private final String BOOK_INFO ="bookInfo";
+    private BookInfo bookInfo;
 
     public AddBook(){
     }
@@ -49,6 +44,7 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
         super.onSaveInstanceState(outState);
         if(ean!=null) {
             outState.putString(EAN_CONTENT, ean.getText().toString());
+            outState.putParcelable(BOOK_INFO, bookInfo);
         }
     }
 
@@ -77,7 +73,7 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
                     ean = "978" + ean;
                 }
                 if (ean.length() < 13) {
-                    clearFields();
+                    //clearFields();
                     return;
                 }
                 //Once we have an ISBN, start a book intent
@@ -111,6 +107,7 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
             @Override
             public void onClick(View view) {
                 ean.setText("");
+                clearFields();
             }
         });
 
@@ -122,12 +119,15 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
                 bookIntent.setAction(BookService.DELETE_BOOK);
                 getActivity().startService(bookIntent);
                 ean.setText("");
+                clearFields();
             }
         });
 
         if(savedInstanceState!=null){
             ean.setText(savedInstanceState.getString(EAN_CONTENT));
-            ean.setHint("");
+
+            bookInfo = savedInstanceState.getParcelable(BOOK_INFO);
+            loadBookInfo(bookInfo);
         }
 
         return rootView;
@@ -147,7 +147,7 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
             if (Pattern.matches("978\\d{7}|\\d{13}", contents)) {
                 ean.setText(contents);
             } else {
-                Toast.makeText(getActivity(), "Invalid ISBN code!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getActivity(), R.string.invalid_isbn, Toast.LENGTH_SHORT).show();
             }
         }
     }
@@ -179,36 +179,43 @@ public class AddBook extends Fragment implements LoaderManager.LoaderCallbacks<C
         );
     }
 
-    @Override
-    public void onLoadFinished(android.support.v4.content.Loader<Cursor> loader, Cursor data) {
-        if (!data.moveToFirst()) {
+    private void loadBookInfo(BookInfo book) {
+        if (book == null) {
             return;
         }
 
-        String bookTitle = data.getString(data.getColumnIndex(AlexandriaContract.BookEntry.TITLE));
-        ((TextView) rootView.findViewById(R.id.bookTitle)).setText(bookTitle);
+        ((TextView) rootView.findViewById(R.id.bookTitle)).setText(book.getTitle());
+        ((TextView) rootView.findViewById(R.id.bookSubTitle)).setText(book.getSubTitle());
 
-        String bookSubTitle = data.getString(data.getColumnIndex(AlexandriaContract.BookEntry.SUBTITLE));
-        ((TextView) rootView.findViewById(R.id.bookSubTitle)).setText(bookSubTitle);
-
-        String authors = data.getString(data.getColumnIndex(AlexandriaContract.AuthorEntry.AUTHOR));
+        String authors = book.getAuthors();
         if (authors == null) {
             authors = "";
         }
         String[] authorsArr = authors.split(",");
         ((TextView) rootView.findViewById(R.id.authors)).setLines(authorsArr.length);
         ((TextView) rootView.findViewById(R.id.authors)).setText(authors.replace(",","\n"));
-        String imgUrl = data.getString(data.getColumnIndex(AlexandriaContract.BookEntry.IMAGE_URL));
+
+        String imgUrl = book.getImageUrl();
         if(Patterns.WEB_URL.matcher(imgUrl).matches()){
             new DownloadImage((ImageView) rootView.findViewById(R.id.bookCover)).execute(imgUrl);
             rootView.findViewById(R.id.bookCover).setVisibility(View.VISIBLE);
         }
 
-        String categories = data.getString(data.getColumnIndex(AlexandriaContract.CategoryEntry.CATEGORY));
+        String categories = book.getCategories();
         ((TextView) rootView.findViewById(R.id.categories)).setText(categories);
 
         rootView.findViewById(R.id.save_button).setVisibility(View.VISIBLE);
         rootView.findViewById(R.id.delete_button).setVisibility(View.VISIBLE);
+    }
+
+    @Override
+    public void onLoadFinished(android.support.v4.content.Loader<Cursor> loader, Cursor data) {
+        if (!data.moveToFirst()) {
+            return;
+        }
+
+        bookInfo = new BookInfo(data);
+        loadBookInfo(bookInfo);
     }
 
     @Override
