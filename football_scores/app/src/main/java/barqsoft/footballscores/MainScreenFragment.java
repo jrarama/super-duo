@@ -31,8 +31,8 @@ public class MainScreenFragment extends Fragment implements LoaderManager.Loader
     }
 
     private void updateScores() {
-        Intent service_start = new Intent(getActivity(), MyFetchService.class);
-        getActivity().startService(service_start);
+        Intent serviceIntent = new Intent(getActivity(), MyFetchService.class);
+        getActivity().startService(serviceIntent);
     }
 
     public void setFragmentDate(String date) {
@@ -74,6 +74,7 @@ public class MainScreenFragment extends Fragment implements LoaderManager.Loader
     public void onLoadFinished(Loader<Cursor> cursorLoader, Cursor cursor) {
         Log.d(LOG_TAG, "loader finished");
 
+        // TODO: Why are we iterating the cursor here?
         int i = 0;
         cursor.moveToFirst();
         while (!cursor.isAfterLast()) {

@@ -16,6 +16,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.ProtocolException;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -29,8 +31,14 @@ import barqsoft.footballscores.DatabaseContract;
  */
 public class MyFetchService extends IntentService {
     public static final String LOG_TAG = MyFetchService.class.getSimpleName();
+
+    private static final Uri API_BASE_URI = Uri.parse("http://api.football-data.org/alpha/");
+    final String FIXTURES = "fixtures";
+    final String SEASONS = "seasons";
+
     private static final String NEXT = "n";
     private static final String PAST = "p";
+
 
     public MyFetchService() {
         super("MyFetchService");
@@ -42,35 +50,25 @@ public class MyFetchService extends IntentService {
         getData(PAST, 2);
     }
 
-    private void getData(String pastOrNext, int days) {
-        String timeFrame = pastOrNext + days;
-        // Creating fetch URL
-        final String BASE_URL = "http://api.football-data.org/alpha/fixtures"; // Base URL
-        final String QUERY_TIME_FRAME = "timeFrame"; // Time Frame parameter to determine days
-
-        Uri uri = Uri.parse(BASE_URL).buildUpon().
-                appendQueryParameter(QUERY_TIME_FRAME, timeFrame).build();
-
-        Log.d(LOG_TAG, "URI: " + uri.toString());
-
-        HttpURLConnection m_connection = null;
+    private String fetchUrl(Uri uri) throws IOException {
+        HttpURLConnection connection = null;
         BufferedReader reader = null;
         String JSON_data = null;
 
         // Opening Connection
         try {
             URL fetch = new URL(uri.toString());
-            m_connection = (HttpURLConnection) fetch.openConnection();
-            m_connection.setRequestMethod("GET");
-            m_connection.addRequestProperty("X-Auth-Token", "e136b7858d424b9da07c88f28b61989a");
-            m_connection.connect();
+            connection = (HttpURLConnection) fetch.openConnection();
+            connection.setRequestMethod("GET");
+            connection.addRequestProperty("X-Auth-Token", "e136b7858d424b9da07c88f28b61989a");
+            connection.connect();
 
             // Read the input stream into a String
-            InputStream inputStream = m_connection.getInputStream();
+            InputStream inputStream = connection.getInputStream();
             StringBuffer buffer = new StringBuffer();
             if (inputStream == null) {
                 Log.e(LOG_TAG, "Input stream is null");
-                return;
+                return null;
             }
             reader = new BufferedReader(new InputStreamReader(inputStream));
 
@@ -85,16 +83,21 @@ public class MyFetchService extends IntentService {
             if (buffer.length() == 0) {
                 // Stream was empty.  No point in parsing.
                 Log.d(LOG_TAG, "Data received is empty");
-                return;
+                return null;
             }
-            JSON_data = buffer.toString();
-            Log.d(LOG_TAG, "Result: \n" + JSON_data);
 
-        } catch (Exception e) {
+            JSON_data = buffer.toString();
+
+            Log.d(LOG_TAG, "Fetch Result: \n" + JSON_data);
+
+            return JSON_data;
+        } catch (IOException e) {
             Log.e(LOG_TAG, "Error fetching data", e);
+
+            throw e;
         } finally {
-            if (m_connection != null) {
-                m_connection.disconnect();
+            if (connection != null) {
+                connection.disconnect();
             }
             if (reader != null) {
                 try {
@@ -104,22 +107,49 @@ public class MyFetchService extends IntentService {
                 }
             }
         }
+    }
+
+    private void getSeasons() {
+        Uri uri = API_BASE_URI.buildUpon().appendPath(SEASONS).build();
+        Log.d(LOG_TAG, "Seasons URI: " + uri.toString());
+
         try {
-            if (JSON_data != null) {
+            String json = fetchUrl(uri);
+        } catch (IOException e) {
+            Log.e(LOG_TAG, "Error getting data from server.", e);
+        }
+    }
+
+    private void getData(String pastOrNext, int days) {
+        String timeFrame = pastOrNext + days;
+        // Creating fetch URL
+        final String QUERY_TIME_FRAME = "timeFrame"; // Time Frame parameter to determine days
+
+        Uri uri = API_BASE_URI.buildUpon().appendPath(FIXTURES)
+                .appendQueryParameter(QUERY_TIME_FRAME, timeFrame).build();
+
+        Log.d(LOG_TAG, "Fixtures URI: " + uri.toString());
+
+
+        try {
+            String json = fetchUrl(uri);
+            if (json != null) {
                 // This bit is to check if the data contains any matches. If not, we call processJson on the dummy data
-                JSONArray matches = new JSONObject(JSON_data).getJSONArray("fixtures");
+                JSONArray matches = new JSONObject(json).getJSONArray("fixtures");
                 if (matches.length() == 0) {
                     Log.d(LOG_TAG, "No fixtures");
                     return;
                 }
 
-                processJSONdata(JSON_data, getApplicationContext(), true);
+                processJSONdata(json, getApplicationContext(), true);
             } else {
                 //Could not Connect
-                Log.e(LOG_TAG, "Could not connect to server.");
+                Log.e(LOG_TAG, "No data received.");
             }
         } catch (JSONException e) {
             Log.e(LOG_TAG, "Error parsing JSON result", e);
+        } catch (IOException e) {
+            Log.e(LOG_TAG, "Error getting data from server.", e);
         }
     }
 

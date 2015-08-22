@@ -7,25 +7,39 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
+import android.util.Log;
 
 /**
  * Created by yehya khaled on 2/25/2015.
  */
 public class ScoresProvider extends ContentProvider {
+    private static final String LOG_TAG = ScoresProvider.class.getSimpleName();
+
     private static ScoresDBHelper mOpenHelper;
     private static final int MATCHES = 100;
     private static final int MATCHES_WITH_LEAGUE = 101;
     private static final int MATCHES_WITH_ID = 102;
     private static final int MATCHES_WITH_DATE = 103;
+    private static final int SEASONS = 200;
+
     private UriMatcher muriMatcher = buildUriMatcher();
-    private static final SQLiteQueryBuilder ScoreQuery =
-            new SQLiteQueryBuilder();
+    private static final SQLiteQueryBuilder scoreQueryBuilder = new SQLiteQueryBuilder();
     private static final String SCORES_BY_LEAGUE = DatabaseContract.ScoresTable.LEAGUE_COL + " = ?";
     private static final String SCORES_BY_DATE =
             DatabaseContract.ScoresTable.DATE_COL + " LIKE ?";
     private static final String SCORES_BY_ID =
             DatabaseContract.ScoresTable.MATCH_ID + " = ?";
 
+    static {
+        scoreQueryBuilder.setTables(
+                DatabaseContract.SCORES_TABLE + " INNER JOIN "
+                + DatabaseContract.SEASONS_TABLE + " ON "
+                + DatabaseContract.SCORES_TABLE
+                + "." + DatabaseContract.ScoresTable.LEAGUE_COL
+                + " = " + DatabaseContract.SEASONS_TABLE
+                + "." + DatabaseContract.SeasonsTable.LEAGUE_COLUMN
+        );
+    }
 
     static UriMatcher buildUriMatcher() {
         final UriMatcher matcher = new UriMatcher(UriMatcher.NO_MATCH);
@@ -34,10 +48,11 @@ public class ScoresProvider extends ContentProvider {
         matcher.addURI(authority, "league", MATCHES_WITH_LEAGUE);
         matcher.addURI(authority, "id", MATCHES_WITH_ID);
         matcher.addURI(authority, "date", MATCHES_WITH_DATE);
+        matcher.addURI(authority, "seasons", MATCHES_WITH_DATE);
         return matcher;
     }
 
-    private int match_uri(Uri uri) {
+    private int matchUri(Uri uri) {
         String link = uri.toString();
         if (link.contentEquals(DatabaseContract.BASE_CONTENT_URI.toString())) {
             return MATCHES;
@@ -47,6 +62,8 @@ public class ScoresProvider extends ContentProvider {
             return MATCHES_WITH_ID;
         } else if (link.contentEquals(DatabaseContract.ScoresTable.buildScoreWithLeague().toString())) {
             return MATCHES_WITH_LEAGUE;
+        } else if (link.contentEquals(DatabaseContract.SeasonsTable.buildSeasonsPath().toString())) {
+            return SEASONS;
         }
         return -1;
     }
@@ -74,41 +91,44 @@ public class ScoresProvider extends ContentProvider {
                 return DatabaseContract.ScoresTable.CONTENT_ITEM_TYPE;
             case MATCHES_WITH_DATE:
                 return DatabaseContract.ScoresTable.CONTENT_TYPE;
+            case SEASONS:
+                return DatabaseContract.SeasonsTable.CONTENT_TYPE;
             default:
-                throw new UnsupportedOperationException("Unknown uri :" + uri);
+                throw new UnsupportedOperationException("Unknown uri : " + uri);
         }
+    }
+
+    private Cursor scoreQuery(String[] projection, String selection, String[] selectionArgs, String sortOrder) {
+        return scoreQueryBuilder.query(
+            mOpenHelper.getReadableDatabase(),
+            projection, selection, selectionArgs, null, null, sortOrder
+        );
     }
 
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
         Cursor retCursor;
-        //Log.v(FetchScoreTask.LOG_TAG,uri.getPathSegments().toString());
-        int match = match_uri(uri);
-        //Log.v(FetchScoreTask.LOG_TAG,SCORES_BY_LEAGUE);
-        //Log.v(FetchScoreTask.LOG_TAG,selectionArgs[0]);
-        //Log.v(FetchScoreTask.LOG_TAG,String.valueOf(match));
+        Log.d(LOG_TAG, uri.getPathSegments().toString());
+        int match = matchUri(uri);
+
         switch (match) {
             case MATCHES:
-                retCursor = mOpenHelper.getReadableDatabase().query(
-                        DatabaseContract.SCORES_TABLE,
-                        projection, null, null, null, null, sortOrder);
+                retCursor = scoreQuery(projection, null, null, sortOrder);
                 break;
             case MATCHES_WITH_DATE:
-                //Log.v(FetchScoreTask.LOG_TAG,selectionArgs[1]);
-                //Log.v(FetchScoreTask.LOG_TAG,selectionArgs[2]);
-                retCursor = mOpenHelper.getReadableDatabase().query(
-                        DatabaseContract.SCORES_TABLE,
-                        projection, SCORES_BY_DATE, selectionArgs, null, null, sortOrder);
+                retCursor = scoreQuery(projection, SCORES_BY_DATE, selectionArgs, sortOrder);
                 break;
             case MATCHES_WITH_ID:
-                retCursor = mOpenHelper.getReadableDatabase().query(
-                        DatabaseContract.SCORES_TABLE,
-                        projection, SCORES_BY_ID, selectionArgs, null, null, sortOrder);
+                retCursor = scoreQuery(projection, SCORES_BY_ID, selectionArgs, sortOrder);
                 break;
             case MATCHES_WITH_LEAGUE:
+                retCursor = scoreQuery(projection, SCORES_BY_LEAGUE, selectionArgs, sortOrder);
+                break;
+            case SEASONS:
                 retCursor = mOpenHelper.getReadableDatabase().query(
-                        DatabaseContract.SCORES_TABLE,
-                        projection, SCORES_BY_LEAGUE, selectionArgs, null, null, sortOrder);
+                    DatabaseContract.SEASONS_TABLE,
+                        projection, selection, selectionArgs, null, null, sortOrder
+                );
                 break;
             default:
                 throw new UnsupportedOperationException("Unknown Uri" + uri);
@@ -126,18 +146,27 @@ public class ScoresProvider extends ContentProvider {
     @Override
     public int bulkInsert(Uri uri, ContentValues[] values) {
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
-        //db.delete(DatabaseContract.SCORES_TABLE,null,null);
-        //Log.v(FetchScoreTask.LOG_TAG,String.valueOf(muriMatcher.match(uri)));
-        switch (match_uri(uri)) {
+        int returnCount = 0;
+        int match = matchUri(uri);
+
+        Log.d(LOG_TAG, "Bulk Insert type: " + match);
+        switch (match) {
             case MATCHES:
+            case SEASONS:
                 db.beginTransaction();
-                int returncount = 0;
                 try {
+                    String table;
+                    if (match == MATCHES) {
+                        table = DatabaseContract.SCORES_TABLE;
+                    } else {
+                        table = DatabaseContract.SEASONS_TABLE;
+                    }
+
                     for (ContentValues value : values) {
-                        long _id = db.insertWithOnConflict(DatabaseContract.SCORES_TABLE, null, value,
+                        long _id = db.insertWithOnConflict(table, null, value,
                                 SQLiteDatabase.CONFLICT_REPLACE);
                         if (_id != -1) {
-                            returncount++;
+                            returnCount++;
                         }
                     }
                     db.setTransactionSuccessful();
@@ -145,7 +174,8 @@ public class ScoresProvider extends ContentProvider {
                     db.endTransaction();
                 }
                 getContext().getContentResolver().notifyChange(uri, null);
-                return returncount;
+                return returnCount;
+
             default:
                 return super.bulkInsert(uri, values);
         }
@@ -153,6 +183,25 @@ public class ScoresProvider extends ContentProvider {
 
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
-        return 0;
+        final SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+        final int match = matchUri(uri);
+        int rowsDeleted;
+        // this makes delete all rows return the number of rows deleted
+        if ( null == selection ) selection = "1";
+        switch (match) {
+            case MATCHES:
+                rowsDeleted = db.delete(DatabaseContract.SCORES_TABLE, selection, selectionArgs);
+                break;
+            case SEASONS:
+                rowsDeleted = db.delete(DatabaseContract.SEASONS_TABLE, selection, selectionArgs);
+                break;
+            default:
+                throw new UnsupportedOperationException("Unknown uri: " + uri);
+        }
+        // Because a null deletes all rows
+        if (rowsDeleted != 0) {
+            getContext().getContentResolver().notifyChange(uri, null);
+        }
+        return rowsDeleted;
     }
 }
