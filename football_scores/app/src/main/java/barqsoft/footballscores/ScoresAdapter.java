@@ -26,6 +26,8 @@ public class ScoresAdapter extends CursorAdapter {
     public static final int COL_MATCHDAY = 9;
     public static final int COL_ID = 8;
     public static final int COL_MATCHTIME = 2;
+    public static final int COL_LEAGUE_CAPTION = 12;
+    public static final int COL_LEAGUE_CODE = 13;
     private double detailMatchId = 0;
 
     public double getDetailMatchId() {
@@ -77,10 +79,11 @@ public class ScoresAdapter extends CursorAdapter {
                     , ViewGroup.LayoutParams.MATCH_PARENT));
             TextView match_day = (TextView) v.findViewById(R.id.matchday_textview);
             match_day.setText(Utilies.getMatchDay(cursor.getInt(COL_MATCHDAY),
-                    cursor.getInt(COL_LEAGUE)));
+                    cursor.getString(COL_LEAGUE_CODE)));
             TextView league = (TextView) v.findViewById(R.id.league_textview);
 
-            league.setText(Utilies.getLeague(cursor.getInt(COL_LEAGUE))); // TODO: Fetch league name from DB
+            String caption = Utilies.getLeagueCaption(cursor.getString(COL_LEAGUE_CAPTION));
+            league.setText(caption);
             Button share_button = (Button) v.findViewById(R.id.share_button);
             share_button.setOnClickListener(new View.OnClickListener() {
                 @Override

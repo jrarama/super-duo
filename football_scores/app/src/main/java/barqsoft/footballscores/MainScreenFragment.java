@@ -74,16 +74,7 @@ public class MainScreenFragment extends Fragment implements LoaderManager.Loader
     public void onLoadFinished(Loader<Cursor> cursorLoader, Cursor cursor) {
         Log.d(LOG_TAG, "loader finished");
 
-        // TODO: Why are we iterating the cursor here?
-        int i = 0;
-        cursor.moveToFirst();
-        while (!cursor.isAfterLast()) {
-            i++;
-            cursor.moveToNext();
-        }
-        //Log.v(FetchScoreTask.LOG_TAG,"Loader query: " + String.valueOf(i));
         mAdapter.swapCursor(cursor);
-        //mAdapter.notifyDataSetChanged();
     }
 
     @Override

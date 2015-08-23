@@ -21,14 +21,19 @@ public class ScoresProvider extends ContentProvider {
     private static final int MATCHES_WITH_ID = 102;
     private static final int MATCHES_WITH_DATE = 103;
     private static final int SEASONS = 200;
+    private static final int TEAMS = 300;
+    private static final int TEAM_WITH_ID = 301;
 
     private UriMatcher muriMatcher = buildUriMatcher();
     private static final SQLiteQueryBuilder scoreQueryBuilder = new SQLiteQueryBuilder();
     private static final String SCORES_BY_LEAGUE = DatabaseContract.ScoresTable.LEAGUE_COL + " = ?";
+
     private static final String SCORES_BY_DATE =
             DatabaseContract.ScoresTable.DATE_COL + " LIKE ?";
     private static final String SCORES_BY_ID =
             DatabaseContract.ScoresTable.MATCH_ID + " = ?";
+    private static final String TEAM_BY_ID =
+            DatabaseContract.TeamsTable._ID + " = ?";
 
     static {
         scoreQueryBuilder.setTables(
@@ -48,7 +53,9 @@ public class ScoresProvider extends ContentProvider {
         matcher.addURI(authority, "league", MATCHES_WITH_LEAGUE);
         matcher.addURI(authority, "id", MATCHES_WITH_ID);
         matcher.addURI(authority, "date", MATCHES_WITH_DATE);
-        matcher.addURI(authority, "seasons", MATCHES_WITH_DATE);
+        matcher.addURI(authority, "seasons", SEASONS);
+        matcher.addURI(authority, "teams", TEAMS);
+        matcher.addURI(authority, "team", TEAM_WITH_ID);
         return matcher;
     }
 
@@ -64,6 +71,10 @@ public class ScoresProvider extends ContentProvider {
             return MATCHES_WITH_LEAGUE;
         } else if (link.contentEquals(DatabaseContract.SeasonsTable.buildSeasonsPath().toString())) {
             return SEASONS;
+        } else if (link.contentEquals(DatabaseContract.TeamsTable.buildTeamsPath().toString())) {
+            return TEAMS;
+        } else if (link.contentEquals(DatabaseContract.TeamsTable.buildTeamsPathWithId().toString())) {
+            return TEAM_WITH_ID;
         }
         return -1;
     }
@@ -93,6 +104,10 @@ public class ScoresProvider extends ContentProvider {
                 return DatabaseContract.ScoresTable.CONTENT_TYPE;
             case SEASONS:
                 return DatabaseContract.SeasonsTable.CONTENT_TYPE;
+            case TEAMS:
+                return DatabaseContract.TeamsTable.CONTENT_TYPE;
+            case TEAM_WITH_ID:
+                return DatabaseContract.TeamsTable.CONTENT_ITEM_TYPE;
             default:
                 throw new UnsupportedOperationException("Unknown uri : " + uri);
         }
@@ -126,12 +141,24 @@ public class ScoresProvider extends ContentProvider {
                 break;
             case SEASONS:
                 retCursor = mOpenHelper.getReadableDatabase().query(
-                    DatabaseContract.SEASONS_TABLE,
+                        DatabaseContract.SEASONS_TABLE,
                         projection, selection, selectionArgs, null, null, sortOrder
                 );
                 break;
+            case TEAMS:
+                retCursor = mOpenHelper.getReadableDatabase().query(
+                        DatabaseContract.TEAMS_TABLE,
+                        projection, selection, selectionArgs, null, null, sortOrder
+                );
+                break;
+            case TEAM_WITH_ID:
+                retCursor = mOpenHelper.getReadableDatabase().query(
+                        DatabaseContract.TEAMS_TABLE,
+                        projection, TEAM_BY_ID, selectionArgs, null, null, sortOrder
+                );
+                break;
             default:
-                throw new UnsupportedOperationException("Unknown Uri" + uri);
+                throw new UnsupportedOperationException("Unknown Uri: " + uri);
         }
         retCursor.setNotificationUri(getContext().getContentResolver(), uri);
         return retCursor;
@@ -139,7 +166,6 @@ public class ScoresProvider extends ContentProvider {
 
     @Override
     public Uri insert(Uri uri, ContentValues values) {
-
         return null;
     }
 
@@ -153,13 +179,16 @@ public class ScoresProvider extends ContentProvider {
         switch (match) {
             case MATCHES:
             case SEASONS:
+            case TEAMS:
                 db.beginTransaction();
                 try {
                     String table;
-                    if (match == MATCHES) {
-                        table = DatabaseContract.SCORES_TABLE;
-                    } else {
-                        table = DatabaseContract.SEASONS_TABLE;
+                    switch (match) {
+                        case MATCHES: table = DatabaseContract.SCORES_TABLE; break;
+                        case SEASONS: table = DatabaseContract.SEASONS_TABLE; break;
+                        case TEAMS: table = DatabaseContract.TEAMS_TABLE; break;
+                        default:
+                            throw new UnsupportedOperationException("Unknown Uri: " + uri);
                     }
 
                     for (ContentValues value : values) {
@@ -194,6 +223,9 @@ public class ScoresProvider extends ContentProvider {
                 break;
             case SEASONS:
                 rowsDeleted = db.delete(DatabaseContract.SEASONS_TABLE, selection, selectionArgs);
+                break;
+            case TEAMS:
+                rowsDeleted = db.delete(DatabaseContract.TEAMS_TABLE, selection, selectionArgs);
                 break;
             default:
                 throw new UnsupportedOperationException("Unknown uri: " + uri);

@@ -25,8 +25,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
 
 import barqsoft.footballscores.DatabaseContract;
@@ -40,18 +42,20 @@ public class MyFetchService extends IntentService {
     private static final Uri API_BASE_URI = Uri.parse("http://api.football-data.org/alpha/");
     private final String FIXTURES = "fixtures";
     private final String SOCCER_SEASONS = "soccerseasons";
+    private final String TEAMS = "teams";
     final String LINKS = "_links";
+    final String HREF = "href";
     final String SELF = "self";
     private final String ID_MATCHER = "(.*/)(\\d+)/?";
 
+    private Set<Integer> teamList = new HashSet<>();
     private Map<String, String> leagueMap = new HashMap<>();
     private List<String> wantedLeagues = Arrays.asList(
         "SA", // Serie A
         "PL", // Premiere League
         "CL", // Champions-League
         "PD", // Primera Division
-        "BL1", // Bundesliga 1
-        "BL2" // Bundesliga 2
+        "BL1" // Bundesliga 1
     );
 
     public static final String NEXT = "n";
@@ -68,6 +72,7 @@ public class MyFetchService extends IntentService {
         getSeasons(context);
         getScores(context, NEXT, 2);
         getScores(context, PAST, 2);
+        getTeams(context);
     }
 
     @Nullable
@@ -142,6 +147,10 @@ public class MyFetchService extends IntentService {
         }
     }
 
+    private String getIdFromUrl(String url) {
+        return url.replaceAll(ID_MATCHER, "$2");
+    }
+
     public void getScores(Context context, String pastOrNext, int days) {
         String timeFrame = pastOrNext + days;
         // Creating fetch URL
@@ -175,8 +184,19 @@ public class MyFetchService extends IntentService {
         }
     }
 
+    public void getTeams(Context context) {
+        Uri uri = API_BASE_URI.buildUpon().appendPath(TEAMS).build();
+        Log.d(LOG_TAG, "TEAMS URI: " + uri.toString());
+
+        StringBuffer sb = new StringBuffer();
+        for(int s : teamList) {
+            sb.append(" ");
+            sb.append(s);
+        }
+        Log.d(LOG_TAG, teamList.size() + " Teams Found:" + sb.toString());
+    }
+
     private void processSeasonsData(String json, Context context) {
-        final String HREF = "href";
         final String CAPTION = "caption";
         final String LEAGUE = "league";
 
@@ -187,9 +207,9 @@ public class MyFetchService extends IntentService {
             for (int i= 0; i< seasons.length(); i ++) {
                 JSONObject season = seasons.getJSONObject(i);
 
-                String seasonId = season.getJSONObject(LINKS)
-                        .getJSONObject(SELF).getString(HREF);
-                seasonId = seasonId.replaceAll(ID_MATCHER, "$2");
+                String seasonId = getIdFromUrl(season.getJSONObject(LINKS)
+                        .getJSONObject(SELF).getString(HREF));
+
                 String caption = season.getString(CAPTION);
                 String league = season.getString(LEAGUE);
 
@@ -221,28 +241,20 @@ public class MyFetchService extends IntentService {
         }
     }
 
+
     private void processScoresdata(String json, Context context) {
         //JSON data
 
         final String SOCCER_SEASON = "soccerseason";
         final String MATCH_DATE = "date";
+        final String HOME_TEAM_LINK = "homeTeam";
+        final String AWAY_TEAM_LINK = "awayTeam";
         final String HOME_TEAM = "homeTeamName";
         final String AWAY_TEAM = "awayTeamName";
         final String RESULT = "result";
         final String HOME_GOALS = "goalsHomeTeam";
         final String AWAY_GOALS = "goalsAwayTeam";
         final String MATCH_DAY = "matchday";
-
-        //Match data
-        String league = null;
-        String matchDate = null;
-        String matchTime = null;
-        String home = null;
-        String away = null;
-        String homeGoals = null;
-        String awayGoals = null;
-        String matchId = null;
-        String matchDay = null;
 
         try {
             JSONArray matches = new JSONObject(json).getJSONArray(FIXTURES);
@@ -252,19 +264,23 @@ public class MyFetchService extends IntentService {
             for (int i = 0; i < matches.length(); i++) {
                 JSONObject match = matches.getJSONObject(i);
 
-                league = match.getJSONObject(LINKS).getJSONObject(SOCCER_SEASON).getString("href");
-                league = league.replaceAll(ID_MATCHER, "$2");
+                JSONObject links = match.getJSONObject(LINKS);
+                String league = getIdFromUrl(links.getJSONObject(SOCCER_SEASON).getString(HREF));
 
                 if (!leagueMap.containsKey(league)) {
                     Log.d(LOG_TAG, "League " + league + " not in wanted list");
                     continue;
                 }
 
-                matchId = match.getJSONObject(LINKS).getJSONObject(SELF).getString("href");
-                matchId = matchId.replaceAll(ID_MATCHER, "$2");
+                String homeTeam = getIdFromUrl(links.getJSONObject(HOME_TEAM_LINK).getString(HREF));
+                String awayTeam = getIdFromUrl(links.getJSONObject(AWAY_TEAM_LINK).getString(HREF));
 
-                matchDate = match.getString(MATCH_DATE);
-                matchTime = matchDate.substring(matchDate.indexOf("T") + 1, matchDate.indexOf("Z"));
+                teamList.add(Integer.parseInt(homeTeam));
+                teamList.add(Integer.parseInt(awayTeam));
+
+                String matchId = getIdFromUrl(links.getJSONObject(SELF).getString(HREF));
+                String matchDate = match.getString(MATCH_DATE);
+                String matchTime = matchDate.substring(matchDate.indexOf("T") + 1, matchDate.indexOf("Z"));
                 matchDate = matchDate.substring(0, matchDate.indexOf("T"));
                 SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-ddHH:mm:ss");
                 dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -278,11 +294,11 @@ public class MyFetchService extends IntentService {
                 } catch (Exception e) {
                     Log.e(LOG_TAG, "Error parsing date", e);
                 }
-                home = match.getString(HOME_TEAM);
-                away = match.getString(AWAY_TEAM);
-                homeGoals = match.getJSONObject(RESULT).getString(HOME_GOALS);
-                awayGoals = match.getJSONObject(RESULT).getString(AWAY_GOALS);
-                matchDay = match.getString(MATCH_DAY);
+                String home = match.getString(HOME_TEAM);
+                String away = match.getString(AWAY_TEAM);
+                String homeGoals = match.getJSONObject(RESULT).getString(HOME_GOALS);
+                String awayGoals = match.getJSONObject(RESULT).getString(AWAY_GOALS);
+                String matchDay = match.getString(MATCH_DAY);
                 ContentValues matchValues = new ContentValues();
                 matchValues.put(DatabaseContract.ScoresTable.MATCH_ID, matchId);
                 matchValues.put(DatabaseContract.ScoresTable.DATE_COL, matchDate);

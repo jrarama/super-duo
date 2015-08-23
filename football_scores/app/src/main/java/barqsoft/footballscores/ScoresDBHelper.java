@@ -45,8 +45,15 @@ public class ScoresDBHelper extends SQLiteOpenHelper
                 + " UNIQUE ("+ SeasonsTable.LEAGUE_COLUMN+") ON CONFLICT REPLACE"
                 + " );";
 
+        final String CreateTeamsTable = "CREATE TABLE " + TEAMS_TABLE + " ("
+                + TeamsTable._ID + " INTEGER PRIMARY KEY,"
+                + TeamsTable.NAME_COLUMN + " TEXT NOT NULL,"
+                + TeamsTable.CREST_URL_COLUMN + " TEXT NOT NULL"
+                + " );";
+
         db.execSQL(CreateScoresTable);
         db.execSQL(CreateSeasonsTable);
+        db.execSQL(CreateTeamsTable);
     }
 
     @Override
@@ -55,5 +62,6 @@ public class ScoresDBHelper extends SQLiteOpenHelper
         //Remove old values when upgrading.
         db.execSQL("DROP TABLE IF EXISTS " + SCORES_TABLE);
         db.execSQL("DROP TABLE IF EXISTS " + SEASONS_TABLE);
+        db.execSQL("DROP TABLE IF EXISTS " + TEAMS_TABLE);
     }
 }

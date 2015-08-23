@@ -10,6 +10,7 @@ import android.provider.BaseColumns;
 public class DatabaseContract {
     public static final String SCORES_TABLE = "ScoresTable";
     public static final String SEASONS_TABLE = "SeasonsTable";
+    public static final String TEAMS_TABLE = "TeamsTable";
 
     public static final class ScoresTable implements BaseColumns {
         //Table data
@@ -58,6 +59,27 @@ public class DatabaseContract {
 
         public static Uri buildSeasonsPath() {
             return BASE_CONTENT_URI.buildUpon().appendPath(PATH).build();
+        }
+    }
+
+    public static final class TeamsTable implements BaseColumns {
+        public static final String NAME_COLUMN = "name";
+        public static final String CREST_URL_COLUMN = "crest_url";
+
+        public static final String PATH = "teams";
+
+        public static final String CONTENT_ITEM_TYPE =
+                ContentResolver.CURSOR_ITEM_BASE_TYPE + "/" + CONTENT_AUTHORITY + "/" + PATH;
+
+        public static final String CONTENT_TYPE =
+                ContentResolver.CURSOR_DIR_BASE_TYPE + "/" + CONTENT_AUTHORITY + "/" + PATH;
+
+        public static Uri buildTeamsPath() {
+            return BASE_CONTENT_URI.buildUpon().appendPath(PATH).build();
+        }
+
+        public static Uri buildTeamsPathWithId() {
+            return BASE_CONTENT_URI.buildUpon().appendPath("team").build();
         }
     }
 
