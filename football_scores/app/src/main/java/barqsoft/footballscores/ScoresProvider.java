@@ -37,7 +37,7 @@ public class ScoresProvider extends ContentProvider {
                 + DatabaseContract.SCORES_TABLE
                 + "." + DatabaseContract.ScoresTable.LEAGUE_COL
                 + " = " + DatabaseContract.SEASONS_TABLE
-                + "." + DatabaseContract.SeasonsTable.LEAGUE_COLUMN
+                + "." + DatabaseContract.SeasonsTable.SEASON_ID_COLUMN
         );
     }
 
