@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.TimeZone;
 
 import barqsoft.footballscores.DatabaseContract;
+import barqsoft.footballscores.R;
 
 /**
  * Created by yehya khaled on 3/2/2015.
@@ -40,6 +41,7 @@ public class MyFetchService extends IntentService {
     public static final String LOG_TAG = MyFetchService.class.getSimpleName();
 
     private static final Uri API_BASE_URI = Uri.parse("http://api.football-data.org/alpha/");
+
     private final String FIXTURES = "fixtures";
     private final String SOCCER_SEASONS = "soccerseasons";
     private final String TEAMS = "teams";
@@ -48,7 +50,6 @@ public class MyFetchService extends IntentService {
     final String SELF = "self";
     private final String ID_MATCHER = "(.*/)(\\d+)/?";
 
-    private Set<Integer> teamList = new HashSet<>();
     private Map<String, String> leagueMap = new HashMap<>();
     private List<String> wantedLeagues = Arrays.asList(
         "SA", // Serie A
@@ -72,11 +73,10 @@ public class MyFetchService extends IntentService {
         getSeasons(context);
         getScores(context, NEXT, 2);
         getScores(context, PAST, 2);
-        getTeams(context);
     }
 
     @Nullable
-    private String fetchUrl(Uri uri) throws IOException {
+    private String fetchUrl(Context context, Uri uri) throws IOException {
         HttpURLConnection connection = null;
         BufferedReader reader = null;
         String JSON_data = null;
@@ -86,7 +86,8 @@ public class MyFetchService extends IntentService {
             URL fetch = new URL(uri.toString());
             connection = (HttpURLConnection) fetch.openConnection();
             connection.setRequestMethod("GET");
-            connection.addRequestProperty("X-Auth-Token", "e136b7858d424b9da07c88f28b61989a");
+            String apiToken = context.getResources().getString(R.string.football_apikey);
+            connection.addRequestProperty("X-Auth-Token", apiToken);
             connection.connect();
 
             // Read the input stream into a String
@@ -140,7 +141,7 @@ public class MyFetchService extends IntentService {
         Log.d(LOG_TAG, "Seasons URI: " + uri.toString());
 
         try {
-            String json = fetchUrl(uri);
+            String json = fetchUrl(context, uri);
             processSeasonsData(json, context);
         } catch (IOException e) {
             Log.e(LOG_TAG, "Error getting data from server.", e);
@@ -163,7 +164,7 @@ public class MyFetchService extends IntentService {
 
 
         try {
-            String json = fetchUrl(uri);
+            String json = fetchUrl(context, uri);
             if (json != null) {
                 // This bit is to check if the data contains any matches. If not, we call processJson on the dummy data
                 JSONArray matches = new JSONObject(json).getJSONArray("fixtures");
@@ -184,16 +185,57 @@ public class MyFetchService extends IntentService {
         }
     }
 
-    public void getTeams(Context context) {
-        Uri uri = API_BASE_URI.buildUpon().appendPath(TEAMS).build();
-        Log.d(LOG_TAG, "TEAMS URI: " + uri.toString());
+    public void getTeams(Context context, String seasonId) {
+        Uri uri = API_BASE_URI.buildUpon().appendPath(SOCCER_SEASONS)
+                .appendPath(seasonId).appendPath(TEAMS).build();
 
-        StringBuffer sb = new StringBuffer();
-        for(int s : teamList) {
-            sb.append(" ");
-            sb.append(s);
+        Log.d(LOG_TAG, "TEAMS URI: " + uri.toString());
+        String json;
+        try {
+            json = fetchUrl(context, uri);
+        } catch (IOException e) {
+            Log.e(LOG_TAG, "Error getting data from server.", e);
+            return;
         }
-        Log.d(LOG_TAG, teamList.size() + " Teams Found:" + sb.toString());
+
+        final String NAME = "name";
+        final String CREST_URL = "crestUrl";
+
+        try {
+            JSONObject teamsObj = new JSONObject(json);
+            JSONArray teams = teamsObj.getJSONArray(TEAMS);
+
+            if (teams == null || teams.length() == 0) {
+                Log.d(LOG_TAG, "No teams for Season: " + seasonId);
+                return;
+            }
+
+            List<ContentValues> values = new ArrayList<>();
+            for (int i = 0; i < teams.length(); i++) {
+                JSONObject team = teams.getJSONObject(i);
+
+                String id = getIdFromUrl(team.getJSONObject(LINKS).getJSONObject(SELF).getString(HREF));
+                String name = team.getString(NAME);
+                String crestUrl = team.getString(CREST_URL);
+
+                ContentValues teamValues = new ContentValues();
+                teamValues.put(DatabaseContract.TeamsTable._ID, id);
+                teamValues.put(DatabaseContract.TeamsTable.NAME_COLUMN, name);
+                teamValues.put(DatabaseContract.TeamsTable.CREST_URL_COLUMN, crestUrl);
+                Log.d(LOG_TAG, "Team Id: " + id + ", Name: " + name
+                        + ", CrestUrl: " + crestUrl);
+                values.add(teamValues);
+            }
+
+            ContentValues[] contentValues = new ContentValues[values.size()];
+            values.toArray(contentValues);
+            int insertedData = context.getContentResolver().bulkInsert(
+                    DatabaseContract.TeamsTable.buildTeamsPath(), contentValues);
+
+            Log.d(LOG_TAG, "Succesfully Inserted " + insertedData + " data.");
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
     }
 
     private void processSeasonsData(String json, Context context) {
@@ -227,6 +269,8 @@ public class MyFetchService extends IntentService {
                 Log.d(LOG_TAG, "Seasons Id: " + seasonId + ", League: " + league
                         + ", Caption: " + caption);
                 values.add(seasonValues);
+
+                getTeams(context, seasonId);
             }
 
             ContentValues[] contentValues = new ContentValues[values.size()];
@@ -271,12 +315,6 @@ public class MyFetchService extends IntentService {
                     Log.d(LOG_TAG, "League " + league + " not in wanted list");
                     continue;
                 }
-
-                String homeTeam = getIdFromUrl(links.getJSONObject(HOME_TEAM_LINK).getString(HREF));
-                String awayTeam = getIdFromUrl(links.getJSONObject(AWAY_TEAM_LINK).getString(HREF));
-
-                teamList.add(Integer.parseInt(homeTeam));
-                teamList.add(Integer.parseInt(awayTeam));
 
                 String matchId = getIdFromUrl(links.getJSONObject(SELF).getString(HREF));
                 String matchDate = match.getString(MATCH_DATE);
