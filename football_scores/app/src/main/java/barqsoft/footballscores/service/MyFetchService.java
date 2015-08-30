@@ -33,6 +33,7 @@ import java.util.TimeZone;
 
 import barqsoft.footballscores.DatabaseContract;
 import barqsoft.footballscores.R;
+import barqsoft.footballscores.Utilies;
 
 /**
  * Created by yehya khaled on 3/2/2015.
@@ -75,73 +76,12 @@ public class MyFetchService extends IntentService {
         getScores(context, PAST, 2);
     }
 
-    @Nullable
-    private String fetchUrl(Context context, Uri uri) throws IOException {
-        HttpURLConnection connection = null;
-        BufferedReader reader = null;
-        String JSON_data = null;
-
-        // Opening Connection
-        try {
-            URL fetch = new URL(uri.toString());
-            connection = (HttpURLConnection) fetch.openConnection();
-            connection.setRequestMethod("GET");
-            String apiToken = context.getResources().getString(R.string.football_apikey);
-            connection.addRequestProperty("X-Auth-Token", apiToken);
-            connection.connect();
-
-            // Read the input stream into a String
-            InputStream inputStream = connection.getInputStream();
-            StringBuffer buffer = new StringBuffer();
-            if (inputStream == null) {
-                Log.e(LOG_TAG, "Input stream is null");
-                return null;
-            }
-            reader = new BufferedReader(new InputStreamReader(inputStream));
-
-            String line;
-            while ((line = reader.readLine()) != null) {
-                // Since it's JSON, adding a newline isn't necessary (it won't affect parsing)
-                // But it does make debugging a *lot* easier if you print out the completed
-                // buffer for debugging.
-                buffer.append(line + "\n");
-            }
-
-            if (buffer.length() == 0) {
-                // Stream was empty.  No point in parsing.
-                Log.d(LOG_TAG, "Data received is empty");
-                return null;
-            }
-
-            JSON_data = buffer.toString();
-
-            Log.d(LOG_TAG, "Fetch Result: \n" + JSON_data);
-
-            return JSON_data;
-        } catch (IOException e) {
-            Log.e(LOG_TAG, "Error fetching data", e);
-
-            throw e;
-        } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
-            if (reader != null) {
-                try {
-                    reader.close();
-                } catch (IOException e) {
-                    Log.e(LOG_TAG, "Error Closing Stream");
-                }
-            }
-        }
-    }
-
     public void getSeasons(Context context) {
         Uri uri = API_BASE_URI.buildUpon().appendPath(SOCCER_SEASONS).build();
         Log.d(LOG_TAG, "Seasons URI: " + uri.toString());
 
         try {
-            String json = fetchUrl(context, uri);
+            String json = Utilies.fetchUrl(context, uri, LOG_TAG);
             processSeasonsData(json, context);
         } catch (IOException e) {
             Log.e(LOG_TAG, "Error getting data from server.", e);
@@ -164,7 +104,7 @@ public class MyFetchService extends IntentService {
 
 
         try {
-            String json = fetchUrl(context, uri);
+            String json = Utilies.fetchUrl(context, uri, LOG_TAG);
             if (json != null) {
                 // This bit is to check if the data contains any matches. If not, we call processJson on the dummy data
                 JSONArray matches = new JSONObject(json).getJSONArray("fixtures");
@@ -192,7 +132,7 @@ public class MyFetchService extends IntentService {
         Log.d(LOG_TAG, "TEAMS URI: " + uri.toString());
         String json;
         try {
-            json = fetchUrl(context, uri);
+            json = Utilies.fetchUrl(context, uri, LOG_TAG);
         } catch (IOException e) {
             Log.e(LOG_TAG, "Error getting data from server.", e);
             return;
@@ -317,6 +257,9 @@ public class MyFetchService extends IntentService {
                 }
 
                 String matchId = getIdFromUrl(links.getJSONObject(SELF).getString(HREF));
+                Integer homeTeam = Integer.parseInt(getIdFromUrl(links.getJSONObject(HOME_TEAM_LINK).getString(HREF)));
+                Integer awayTeam = Integer.parseInt(getIdFromUrl(links.getJSONObject(AWAY_TEAM_LINK).getString(HREF)));
+
                 String matchDate = match.getString(MATCH_DATE);
                 String matchTime = matchDate.substring(matchDate.indexOf("T") + 1, matchDate.indexOf("Z"));
                 matchDate = matchDate.substring(0, matchDate.indexOf("T"));
@@ -343,6 +286,8 @@ public class MyFetchService extends IntentService {
                 matchValues.put(DatabaseContract.ScoresTable.TIME_COL, matchTime);
                 matchValues.put(DatabaseContract.ScoresTable.HOME_COL, home);
                 matchValues.put(DatabaseContract.ScoresTable.AWAY_COL, away);
+                matchValues.put(DatabaseContract.ScoresTable.HOME_TEAM_COL, homeTeam);
+                matchValues.put(DatabaseContract.ScoresTable.AWAY_TEAM_COL, awayTeam);
                 matchValues.put(DatabaseContract.ScoresTable.HOME_GOALS_COL, homeGoals);
                 matchValues.put(DatabaseContract.ScoresTable.AWAY_GOALS_COL, awayGoals);
                 matchValues.put(DatabaseContract.ScoresTable.LEAGUE_COL, league);
@@ -350,8 +295,8 @@ public class MyFetchService extends IntentService {
 
                 Log.d(LOG_TAG, "MatchID: " + matchId + ", League: " + league
                     + ", Match Day: " + matchDay + ", Date: "+ matchDate + ", Time: " + matchTime
-                    + ", Home: " + home + ", Away: " + away + ", HomeGoals: " + homeGoals
-                    + ", Away Goals: " + awayGoals);
+                    + ", Home: " + homeTeam + " " + home + ", Away: " + awayTeam + " "  +away
+                    + ", HomeGoals: " + homeGoals + ", Away Goals: " + awayGoals);
 
                 values.add(matchValues);
             }

@@ -6,7 +6,7 @@ android {
 
     defaultConfig {
         applicationId "barqsoft.footballscores"
-        minSdkVersion 10
+        minSdkVersion 11
         targetSdkVersion 21
         versionCode 1
         versionName "1.0"
@@ -20,6 +20,8 @@ android {
 }
 
 dependencies {
-    compile fileTree(dir: 'libs', include: ['*.jar'])
+    compile fileTree(include: ['*.jar'], dir: 'libs')
     compile 'com.android.support:appcompat-v7:21.0.3'
+    compile 'com.caverock:androidsvg:1.2.1'
+    compile files('lib/glide-3.6.1.jar')
 }
